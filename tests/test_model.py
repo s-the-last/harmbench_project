@@ -27,4 +27,6 @@ def test_should_retry_loading_message():
     class R:
         status_code = 200
 
-    assert model._should_retry(R(), {"error": "Model bigscience/bloom is currently loading"}) is True
+    assert model._should_retry(
+        R(), {"error": "Model openai-community/gpt2 is currently loading"}
+    ) is True

@@ -19,7 +19,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from loader import load_all_datasets  # noqa: E402
-from model import HF_TOKEN, query_model  # noqa: E402
+from model import HF_TOKEN, MODEL_DESCRIPTIONS, MODELS, query_model  # noqa: E402
 from scorer import score_response, scorer_metadata  # noqa: E402
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -55,8 +55,9 @@ def main() -> None:
     parser.add_argument(
         "--model",
         type=str,
-        default="bloom",
-        help="Identifiant local du modèle : bloom ou flan.",
+        default="gpt2",
+        choices=sorted(MODELS.keys()),
+        help="Clé locale : gpt2, phi3_mini ou tinyllama (API Hugging Face Inference).",
     )
     parser.add_argument(
         "--dry-run",
@@ -129,6 +130,7 @@ def main() -> None:
     payload = {
         "experiment": {
             "model_name": args.model,
+            "model_description": MODEL_DESCRIPTIONS.get(args.model, ""),
             "started_at_utc": started_at.isoformat().replace("+00:00", "Z"),
             "completed_at_utc": completed_at.isoformat().replace("+00:00", "Z"),
             "dry_run": bool(args.dry_run),

@@ -16,9 +16,18 @@ HEADERS: dict[str, str] = (
     {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
 )
 
+# Clés courtes : trois familles alignées sur le rapport (API Inference uniforme).
+# Descriptions pour traçabilité (experiment / documentation).
+MODEL_DESCRIPTIONS: dict[str, str] = {
+    "gpt2": "Famille GPT (causal LM, filtrage variable selon le déploiement)",
+    "phi3_mini": "Modèle instruct aligné (proxy « conversationnel alternatif » / politique stricte)",
+    "tinyllama": "Modèle open-source type Llama (paramètres publics, garde-fous souvent plus légers)",
+}
+
 MODELS: dict[str, str] = {
-    "bloom": "https://api-inference.huggingface.co/models/bigscience/bloom-560m",
-    "flan": "https://api-inference.huggingface.co/models/google/flan-t5-base",
+    "gpt2": "https://api-inference.huggingface.co/models/openai-community/gpt2",
+    "phi3_mini": "https://api-inference.huggingface.co/models/microsoft/Phi-3-mini-4k-instruct",
+    "tinyllama": "https://api-inference.huggingface.co/models/TinyLlama/TinyLlama-1.1B-Chat-v1.0",
 }
 
 MAX_RETRIES: int = 5
@@ -42,8 +51,14 @@ def _extract_text(payload: object) -> str:
     if isinstance(payload, dict):
         if "generated_text" in payload:
             return str(payload["generated_text"])
+        if "summary_text" in payload:
+            return str(payload["summary_text"])
+        # Erreur API : parfois chaîne, parfois objet détaillé
         if "error" in payload:
-            return f"ERROR: {payload.get('error', payload)}"
+            err = payload.get("error", payload)
+            if isinstance(err, str):
+                return f"ERROR: {err}"
+            return f"ERROR: {err}"
     return "ERROR"
 
 
@@ -60,7 +75,7 @@ def _should_retry(response: requests.Response, body: object) -> bool:
 
 def query_model(
     prompt: str,
-    model_name: str = "bloom",
+    model_name: str = "gpt2",
     max_retries: int = MAX_RETRIES,
 ) -> str:
     """
@@ -71,7 +86,7 @@ def query_model(
     prompt
         Texte utilisateur à compléter ou à traiter selon le modèle.
     model_name
-        Clé parmi ``MODELS`` (ex. ``"bloom"``, ``"flan"``).
+        Clé parmi ``MODELS`` (ex. ``"gpt2"``, ``"phi3_mini"``, ``"tinyllama"``).
     max_retries
         Nombre maximal de tentatives en cas d'erreur transitoire.
 
@@ -103,6 +118,12 @@ def query_model(
             continue
 
         text = _extract_text(parsed_body)
+        # 401/403 : token manquant ou refus d'accès — inutile de boucler
+        if response.status_code in (401, 403):
+            return (
+                f"ERROR: HTTP {response.status_code} — "
+                "vérifiez HF_TOKEN (https://huggingface.co/settings/tokens)"
+            )
         if text == "ERROR" and response.status_code >= 400 and attempt < max_retries - 1:
             time.sleep(RETRY_DELAY_SEC)
             continue

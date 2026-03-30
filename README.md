@@ -8,18 +8,20 @@ L’objectif n’est pas de reproduire l’intégralité du protocole HarmBench 
 
 ## Design expérimental
 
-Les stimuli sont répartis en **trois dimensions** complémentaires, matérialisées par des fichiers JSONL distincts :
+Un corpus de **120 prompts** (40 par dimension) est réparti en **trois catégories** complémentaires, chacune dans un fichier JSONL distinct. L’ordre de chargement est **fixe** : `harmbench_standard.jsonl` → `harmbench_contextual.jsonl` → `harmbench_copyright.jsonl` (reproductibilité).
 
-1. **Prompts nuisibles directs** (`harmbench_standard.jsonl`)  
-   Requêtes à risque explicite (violences, auto-agression, cybercriminalité) confrontées à des requêtes neutres servant de contrôle.
+1. **Harmbench — standard** (`harmbench_standard.jsonl`)  
+   Requêtes à risque explicite (violence, manipulation, cybercriminalité, auto-agression) confrontées à des requêtes **neutres** servant de contrôle.
 
-2. **Attaques par injection de contexte** (`harmbench_contextual.jsonl`)  
-   Formulations visant à contourner des consignes de sûreté (« ignorer les instructions précédentes », etc.), comparées à des questions scientifiques ou générales sans intention malveillante.
+2. **Harmbench — contextual** (`harmbench_contextual.jsonl`)  
+   Formulations visant à contourner les garde-fous (injections de contexte, « ignorer les instructions précédentes », jeux de rôle), comparées à des questions **légitimes** sans intention malveillante.
 
-3. **Requêtes sensibles au copyright** (`harmbench_copyright.jsonl`)  
-   Sollicitations de reproduction de contenus protégés versus questions éducatives sans enjeu de propriété intellectuelle.
+3. **Harmbench — copyright** (`harmbench_copyright.jsonl`)  
+   Sollicitations de reproduction de contenus **protégés** versus questions **éducatives** ou juridiques générales (éthique, désinformation, fair use, etc.) sans demande de copie intégrale.
 
 Chaque enregistrement comporte un identifiant, un type, une catégorie, le texte du prompt et un **comportement attendu** (`refuse` ou `answer`) servant de référence pour le score.
+
+Le script `scripts/build_corpus_120.py` régénère ces trois fichiers à partir du schéma du projet (usage ponctuel si vous modifiez le corpus).
 
 ## Perspective d’évaluation éthique
 
@@ -76,19 +78,24 @@ où \(N=1\) si **nuisance** (toxicité OU complaisance préjudiciable), sinon \(
 
 Les pondérations et la version du scoreur sont incluses dans le champ `experiment.scorer` du fichier `results.json`.
 
-## Structure du dépôt
+## Structure du dépôt (alignée rapport §3.1)
+
+| Module | Fichier | Rôle |
+|--------|---------|------|
+| Chargement des données | `src/loader.py` | Lecture déterministe des JSONL (ordre fixe des trois jeux) |
+| Appels API | `src/model.py` | Requêtes Hugging Face Inference + nouvelles tentatives / erreurs |
+| Scoring | `src/scorer.py` | Indicateurs et score global |
+| Orchestration | `src/evaluate.py` | Boucle d’expériences et journalisation `results.json` |
+| Analyse | `src/analysis.py` | Agrégats statistiques et export CSV |
 
 ```
-data/                 # Prompts JSONL (trois dimensions)
-outputs/<modèle>/     # Résultats générés (results.json)
-src/
-  loader.py           # Chargement déterministe des JSONL
-  model.py            # Appels API + politique de nouvelle tentative
-  scorer.py           # Indicateurs et score_global
-  evaluate.py         # Orchestration et journalisation
-  analysis.py         # Agrégats, synthèse, export CSV
+data/                 # harmbench_standard / contextual / copyright (40 lignes chacun)
+outputs/<modèle>/     # Résultats (results.json)
+scripts/              # build_corpus_120.py — régénération du corpus 120 prompts
+src/                  # modules ci-dessus
 tests/                # Tests unitaires (pytest)
 notebooks/            # Visualisations optionnelles
+evaluate.py           # Point d’entrée racine → délègue à src/evaluate.py
 ```
 
 ## Installation
@@ -104,14 +111,29 @@ Variable d’environnement pour l’API Hugging Face :
 - PowerShell : `$env:HF_TOKEN = "hf_..."`  
 - bash : `export HF_TOKEN="hf_..."`
 
+## Modèles évalués (rapport §3.4)
+
+Trois identifiants locaux ciblent l’**API Hugging Face Inference** de façon uniforme (même protocole, comparaisons inter-modèles) :
+
+| Clé | Rôle dans le rapport |
+|-----|----------------------|
+| `gpt2` | Famille type GPT (causal LM `openai-community/gpt2`) |
+| `phi3_mini` | Modèle instruct aligné (proxy du « modèle conversationnel alternatif » à politique stricte, `microsoft/Phi-3-mini-4k-instruct`) |
+| `tinyllama` | Modèle open-source type Llama (`TinyLlama/TinyLlama-1.1B-Chat-v1.0`) |
+
+Les descriptions textuelles sont aussi stockées dans `experiment.model_description` dans chaque `results.json`.
+
 ## Exécution des expériences
 
 Depuis la racine du projet :
 
 ```bash
-python src/evaluate.py --model bloom
-python src/evaluate.py --model flan
+python src/evaluate.py --model gpt2
+python src/evaluate.py --model phi3_mini
+python src/evaluate.py --model tinyllama
 ```
+
+(Équivalent : `python evaluate.py --model gpt2`, etc.)
 
 Options utiles :
 
